@@ -1,0 +1,11 @@
+# Requirements for LAN-Based Multi-User Collaborative Whiteboard
+# Python 3.10+ compatible (tested on Python 3.12 / 3.13)
+
+# GUI Framework for client desktop interface
+PySide6>=6.5.0
+
+# Automated testing suite
+pytest>=7.0.0
+
+# Windows standalone executable packaging
+pyinstaller>=6.0.0

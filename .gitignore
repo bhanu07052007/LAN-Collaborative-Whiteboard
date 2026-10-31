@@ -1,0 +1,31 @@
+# Python Bytecode and Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Testing Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Temporary files
+*.tmp
+*.log
+data/sessions/*.tmp
+
+# IDE Configurations
+.vscode/
+.idea/
+*.swp

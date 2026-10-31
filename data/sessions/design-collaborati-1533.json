@@ -1,0 +1,456 @@
+{
+  "version": 1,
+  "room_id": "design-collaborati-1533",
+  "room_name": "Design Collaboration",
+  "creator_id": "user-6282210a",
+  "created_at": 1793467566.3780887,
+  "has_password": false,
+  "password_hash": null,
+  "password_salt": null,
+  "seq_num": 23,
+  "operations": [
+    {
+      "op_id": "op-be7c1057ec9b",
+      "op_type": "pen",
+      "data": {
+        "color": "#1E293B",
+        "points": [
+          [
+            250.4,
+            141.6
+          ],
+          [
+            252.0,
+            143.2
+          ],
+          [
+            254.4,
+            144.0
+          ],
+          [
+            261.6,
+            148.0
+          ],
+          [
+            269.6,
+            152.8
+          ],
+          [
+            280.8,
+            158.4
+          ],
+          [
+            293.6,
+            164.8
+          ],
+          [
+            300.8,
+            168.8
+          ],
+          [
+            308.0,
+            172.8
+          ],
+          [
+            314.4,
+            177.6
+          ],
+          [
+            321.6,
+            182.4
+          ],
+          [
+            328.8,
+            187.2
+          ],
+          [
+            337.6,
+            191.2
+          ],
+          [
+            344.8,
+            196.8
+          ],
+          [
+            360.8,
+            206.4
+          ],
+          [
+            368.0,
+            210.4
+          ],
+          [
+            375.2,
+            214.4
+          ],
+          [
+            382.4,
+            218.4
+          ],
+          [
+            389.6,
+            223.2
+          ],
+          [
+            395.2,
+            227.2
+          ],
+          [
+            400.0,
+            229.6
+          ],
+          [
+            404.8,
+            232.8
+          ],
+          [
+            408.0,
+            235.2
+          ],
+          [
+            412.0,
+            237.6
+          ],
+          [
+            415.2,
+            239.2
+          ],
+          [
+            417.6,
+            240.8
+          ],
+          [
+            420.0,
+            242.4
+          ],
+          [
+            422.4,
+            244.8
+          ]
+        ],
+        "width": 3
+      },
+      "user_id": "user-6282210a",
+      "username": "Engineer",
+      "seq_num": 1,
+      "created_at": 1793467584.6873157,
+      "is_undone": false,
+      "cleared_at_seq": 12,
+      "is_deleted": true,
+      "author_id": "user-6282210a",
+      "author_name": "Engineer",
+      "last_modified_by": "Engineer",
+      "last_modified_at": 1793467593.9621341
+    },
+    {
+      "op_id": "op-40d678b1197d",
+      "op_type": "eraser",
+      "data": {
+        "color": "#FFFFFF",
+        "points": [
+          [
+            255.2,
+            180.8
+          ],
+          [
+            259.2,
+            176.8
+          ],
+          [
+            260.8,
+            173.6
+          ],
+          [
+            262.4,
+            172.0
+          ],
+          [
+            263.2,
+            169.6
+          ],
+          [
+            264.8,
+            168.0
+          ],
+          [
+            266.4,
+            166.4
+          ],
+          [
+            267.2,
+            164.0
+          ],
+          [
+            268.8,
+            162.4
+          ],
+          [
+            270.4,
+            160.0
+          ],
+          [
+            272.0,
+            157.6
+          ],
+          [
+            274.4,
+            155.2
+          ],
+          [
+            276.0,
+            152.8
+          ],
+          [
+            277.6,
+            150.4
+          ],
+          [
+            279.2,
+            148.8
+          ],
+          [
+            280.0,
+            146.4
+          ],
+          [
+            282.4,
+            144.0
+          ],
+          [
+            284.0,
+            142.4
+          ],
+          [
+            285.6,
+            140.8
+          ],
+          [
+            287.2,
+            139.2
+          ]
+        ],
+        "width": 24
+      },
+      "user_id": "user-6282210a",
+      "username": "Engineer",
+      "seq_num": 8,
+      "created_at": 1793467599.3572109,
+      "is_undone": false,
+      "cleared_at_seq": 21,
+      "is_deleted": false,
+      "author_id": "user-6282210a",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-42289ad2849f",
+      "op_type": "line",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          636.0,
+          280.0
+        ],
+        "start": [
+          352.8,
+          22.4
+        ],
+        "width": 3
+      },
+      "user_id": "user-6282210a",
+      "username": "Engineer",
+      "seq_num": 9,
+      "created_at": 1793467648.454734,
+      "is_undone": false,
+      "cleared_at_seq": 21,
+      "is_deleted": false,
+      "author_id": "user-6282210a",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-527c45436a3a",
+      "op_type": "line",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          636.8,
+          280.0
+        ],
+        "start": [
+          636.8,
+          280.0
+        ],
+        "width": 3
+      },
+      "user_id": "user-6282210a",
+      "username": "Engineer",
+      "seq_num": 10,
+      "created_at": 1793467648.9126801,
+      "is_undone": false,
+      "cleared_at_seq": 21,
+      "is_deleted": false,
+      "author_id": "user-6282210a",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-86e7368329d7",
+      "op_type": "sticky",
+      "data": {
+        "color": "#FEF08A",
+        "height": 140,
+        "text": "thbty",
+        "width": 180,
+        "x": 680.0,
+        "y": 84.0
+      },
+      "user_id": "user-6282210a",
+      "username": "Engineer",
+      "seq_num": 11,
+      "created_at": 1793467781.3670332,
+      "is_undone": false,
+      "cleared_at_seq": 21,
+      "is_deleted": false,
+      "author_id": "user-6282210a",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-bbe28dc3229c",
+      "op_type": "pen",
+      "data": {
+        "color": "#1E293B",
+        "points": [
+          [
+            251.6,
+            87.1
+          ],
+          [
+            253.3,
+            88.9
+          ],
+          [
+            255.1,
+            91.6
+          ],
+          [
+            256.9,
+            94.2
+          ],
+          [
+            259.6,
+            97.8
+          ],
+          [
+            262.2,
+            101.3
+          ],
+          [
+            272.9,
+            114.7
+          ],
+          [
+            278.2,
+            120.0
+          ],
+          [
+            289.8,
+            131.6
+          ],
+          [
+            307.6,
+            147.6
+          ],
+          [
+            312.9,
+            152.0
+          ],
+          [
+            318.2,
+            156.4
+          ],
+          [
+            323.6,
+            160.0
+          ],
+          [
+            326.2,
+            161.8
+          ],
+          [
+            328.9,
+            164.4
+          ],
+          [
+            331.6,
+            167.1
+          ],
+          [
+            333.3,
+            168.9
+          ],
+          [
+            336.0,
+            170.7
+          ],
+          [
+            338.7,
+            172.4
+          ]
+        ],
+        "width": 3
+      },
+      "user_id": "user-6282210a",
+      "username": "Engineer",
+      "seq_num": 22,
+      "created_at": 1793467849.799357,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "author_id": "user-6282210a",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-0df460ee2b0b",
+      "op_type": "pen",
+      "data": {
+        "color": "#1E293B",
+        "points": [
+          [
+            411.6,
+            208.9
+          ]
+        ],
+        "width": 3
+      },
+      "user_id": "user-6282210a",
+      "username": "Engineer",
+      "seq_num": 23,
+      "created_at": 1793467850.1381614,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "author_id": "user-6282210a",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    }
+  ],
+  "chat_messages": [
+    {
+      "message_id": "msg-1793467793813-1",
+      "room_id": "design-collaborati-1533",
+      "user_id": "user-6282210a",
+      "username": "Engineer",
+      "text": "tgtrhyt",
+      "timestamp": 1793467793.813671
+    }
+  ]
+}
