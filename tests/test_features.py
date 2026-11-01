@@ -988,5 +988,143 @@ def test_light_blue_theme_and_bottom_undo_redo():
     assert any("Delete" in b.toolTip() for b in bottom_action_btns)
 
 
+def test_deletion_and_undo_redo_restoration():
+    from server.whiteboard_manager import WhiteboardManager
+    mgr = WhiteboardManager()
+    room_wb = mgr.get_or_create_room_whiteboard("test-del-room")
+
+    # 1. User draws op1
+    op1_dict = {"op_id": "op-pen-1", "op_type": "pen", "data": {"points": [[10, 10], [20, 20]], "width": 3, "color": "#000000"}}
+    ok1, msg1, op1 = room_wb.add_operation(op1_dict, "u1", "Alice")
+    assert ok1
+    op1_id = op1.op_id
+
+    # 2. User draws op2
+    op2_dict = {"op_id": "op-line-2", "op_type": "line", "data": {"start": [30, 30], "end": [80, 80], "width": 3, "color": "#000000"}}
+    ok2, msg2, op2 = room_wb.add_operation(op2_dict, "u1", "Alice")
+    assert ok2
+    op2_id = op2.op_id
+
+    snap = room_wb.get_snapshot()
+    assert len(snap["operations"]) == 2
+
+    # 3. User deletes op2
+    ok_del, msg_del, op_del = room_wb.delete_operation(op2_id, "u1")
+    assert ok_del
+    assert op_del.is_deleted is True
+
+    # Active snapshot only contains op1
+    snap = room_wb.get_snapshot()
+    assert len(snap["operations"]) == 1
+    assert snap["operations"][0]["op_id"] == op1_id
+
+    # 4. User undoes: op2 should be restored! op1 must NOT be touched
+    ok_undo, msg_undo, op_undo = room_wb.undo_last_user_operation("u1")
+    assert ok_undo
+    assert op_undo.op_id == op2_id
+    assert op_undo.is_deleted is False
+
+    snap = room_wb.get_snapshot()
+    assert len(snap["operations"]) == 2
+    op_ids = [o["op_id"] for o in snap["operations"]]
+    assert op1_id in op_ids and op2_id in op_ids
+
+    # 5. User redoes: op2 should be re-deleted!
+    ok_redo, msg_redo, op_redo = room_wb.redo_last_user_operation("u1")
+    assert ok_redo
+    assert op_redo.op_id == op2_id
+    assert op_redo.is_deleted is True
+
+    snap = room_wb.get_snapshot()
+    assert len(snap["operations"]) == 1
+    assert snap["operations"][0]["op_id"] == op1_id
+
+
+def test_precise_hit_testing_vs_bounding_box():
+    app = QApplication.instance() or QApplication([])
+    state = LocalState(user_id="u1", username="Alice", current_room_id="room-1")
+    canvas = WhiteboardCanvas(state)
+
+    # Diagonal stroke from (10, 10) to (100, 100)
+    op = {
+        "op_id": "stroke-1",
+        "op_type": TOOL_PEN,
+        "data": {"points": [[10, 10], [100, 100]], "width": 4, "color": "#000"},
+        "author_name": "Alice",
+        "is_undone": False,
+        "is_deleted": False,
+        "cleared_at_seq": None,
+    }
+    state.operations = [op]
+
+    # Point (10, 90) is inside bounding box (10..100, 10..100) but ~56px away from line
+    hit_miss = canvas._hit_test_precise(QPointF(10, 90))
+    assert hit_miss is None
+
+    # Point (50, 52) is ~1.4px away from line: must hit!
+    hit = canvas._hit_test_precise(QPointF(50, 52))
+    assert hit is not None
+    assert hit["op_id"] == "stroke-1"
+
+
+def test_laser_stroke_broadcast_and_3s_expiration():
+    assert LASER_FADE_DURATION == 3.0
+    state = LocalState(user_id="u1", username="Alice")
+    state.add_laser_stroke("u1", [[10, 10], [50, 50]], color="#EF4444")
+    assert len(state.laser_strokes) == 1
+
+    # Immediate purge does not remove fresh stroke
+    purged = state.purge_expired_lasers(fade_duration=3.0)
+    assert purged is False
+    assert len(state.laser_strokes) == 1
+
+    # Simulate 3.1s passage
+    state.laser_strokes[0]["created_at"] = time.time() - 3.1
+    purged = state.purge_expired_lasers(fade_duration=3.0)
+    assert purged is True
+    assert len(state.laser_strokes) == 0
+
+
+def test_host_only_end_meeting_authorization():
+    from server.session_manager import SessionManager
+    from server.socket_server import SocketServer
+    from common.message_types import MessageType
+
+    session_mgr = SessionManager()
+    ok, msg, room = session_mgr.create_room(room_id="test-room-host", creator_id="host-1", room_name="Test Room")
+    assert ok
+    assert room is not None
+
+    # Non-host attempt
+    server = SocketServer()
+    server.session_mgr = session_mgr
+
+    sent_messages = []
+    server.connection_mgr.send_to_client = lambda uid, m: sent_messages.append((uid, m))
+
+    msg = {"type": MessageType.END_MEETING.value, "room_id": room.room_id, "user_id": "guest-2"}
+    server._handle_end_meeting(user_id="guest-2", room_id=room.room_id, msg=msg)
+
+    # Verify error message returned and meeting not ended
+    assert len(sent_messages) == 1
+    assert sent_messages[0][0] == "guest-2"
+    unpacked = sent_messages[0][1]
+    assert unpacked["type"] == MessageType.ERROR.value
+    assert "Only the meeting host" in unpacked["message"]
+    assert session_mgr.get_room(room.room_id) is not None
+
+    # Host UI visibility check (check explicit visibility state on widget)
+    app = QApplication.instance() or QApplication([])
+    state_host = LocalState(user_id="host-1", username="Host", is_host=True)
+    net = NetworkClient()
+    win_host = MainWindow(state_host, net)
+    assert not win_host.end_meeting_btn.isHidden()
+
+    state_guest = LocalState(user_id="guest-2", username="Guest", is_host=False)
+    win_guest = MainWindow(state_guest, net)
+    assert win_guest.end_meeting_btn.isHidden()
+
+
+
 
 

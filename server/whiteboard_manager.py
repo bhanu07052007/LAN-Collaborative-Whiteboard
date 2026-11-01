@@ -51,6 +51,9 @@ class DrawingOperation:
     is_undone: bool = False
     cleared_at_seq: Optional[int] = None
     is_deleted: bool = False
+    deleted_by: Optional[str] = None
+    deleted_seq: Optional[int] = None
+    last_undone_deleted_by: Optional[str] = None
     author_id: str = ""
     author_name: str = ""
     last_modified_by: Optional[str] = None
@@ -74,6 +77,9 @@ class DrawingOperation:
             "is_undone": self.is_undone,
             "cleared_at_seq": self.cleared_at_seq,
             "is_deleted": self.is_deleted,
+            "deleted_by": self.deleted_by,
+            "deleted_seq": self.deleted_seq,
+            "last_undone_deleted_by": self.last_undone_deleted_by,
             "author_id": self.author_id,
             "author_name": self.author_name,
             "last_modified_by": self.last_modified_by,
@@ -93,6 +99,9 @@ class DrawingOperation:
             is_undone=d.get("is_undone", False),
             cleared_at_seq=d.get("cleared_at_seq"),
             is_deleted=d.get("is_deleted", False),
+            deleted_by=d.get("deleted_by"),
+            deleted_seq=d.get("deleted_seq"),
+            last_undone_deleted_by=d.get("last_undone_deleted_by"),
             author_id=d.get("author_id", d["user_id"]),
             author_name=d.get("author_name", d["username"]),
             last_modified_by=d.get("last_modified_by"),
@@ -260,15 +269,17 @@ class RoomWhiteboard:
 
     def delete_operation(self, op_id: str, user_id: str) -> Tuple[bool, str, Optional[DrawingOperation]]:
         """
-        Marks an object as deleted.
+        Marks an object as deleted by user_id.
         """
         with self._lock:
             for op in self._operations:
                 if op.op_id == op_id and not op.is_deleted:
                     self._seq_num += 1
                     op.is_deleted = True
-                    op.cleared_at_seq = self._seq_num
-                    logger.info("Room %s: Op %s deleted by %s", self.room_id, op_id, user_id)
+                    op.deleted_by = user_id
+                    op.deleted_seq = self._seq_num
+                    op.last_undone_deleted_by = None
+                    logger.info("Room %s: Op %s deleted by %s (seq %d)", self.room_id, op_id, user_id, self._seq_num)
                     return True, "Object deleted", op
 
             return False, f"Object '{op_id}' not found or already deleted", None
@@ -297,33 +308,78 @@ class RoomWhiteboard:
 
     def undo_last_user_operation(self, user_id: str) -> Tuple[bool, str, Optional[DrawingOperation]]:
         """
-        Undoes the most recent active operation authored by user_id.
+        Undoes the most recent active operation or deletion performed by user_id.
+        Restores deleted objects if the last action by user was a deletion.
         Returns (success, message, affected_operation).
         """
         with self._lock:
-            # Search backwards for the most recent active operation by this user
+            cand_del = None
+            cand_draw = None
+
             for op in reversed(self._operations):
-                if op.user_id == user_id and not op.is_undone and op.cleared_at_seq is None:
-                    self._seq_num += 1
-                    op.is_undone = True
-                    logger.info("Room %s: User %s undid op %s (seq %d)", self.room_id, user_id, op.op_id, self._seq_num)
-                    return True, "Operation undone", op
+                if op.cleared_at_seq is not None:
+                    continue
+                if cand_del is None and op.is_deleted and op.deleted_by == user_id:
+                    cand_del = op
+                if cand_draw is None and not op.is_deleted and not op.is_undone and op.user_id == user_id:
+                    cand_draw = op
+
+            del_seq = (cand_del.deleted_seq or 0) if cand_del else -1
+            draw_seq = cand_draw.seq_num if cand_draw else -1
+
+            if cand_del and del_seq >= draw_seq:
+                self._seq_num += 1
+                cand_del.is_deleted = False
+                cand_del.is_undone = False
+                cand_del.deleted_by = None
+                cand_del.deleted_seq = None
+                cand_del.last_undone_deleted_by = user_id
+                logger.info("Room %s: User %s undid deletion of op %s (restored at seq %d)",
+                            self.room_id, user_id, cand_del.op_id, self._seq_num)
+                return True, "Deletion undone, object restored", cand_del
+
+            elif cand_draw:
+                self._seq_num += 1
+                cand_draw.is_undone = True
+                logger.info("Room %s: User %s undid op %s (seq %d)",
+                            self.room_id, user_id, cand_draw.op_id, self._seq_num)
+                return True, "Operation undone", cand_draw
 
             return False, "No active operations to undo for this user", None
 
     def redo_last_user_operation(self, user_id: str) -> Tuple[bool, str, Optional[DrawingOperation]]:
         """
-        Redoes the most recent undone operation authored by user_id.
+        Redoes the most recent undone operation or undone deletion performed by user_id.
         Returns (success, message, affected_operation).
         """
         with self._lock:
-            # Search backwards for the most recent undone operation by this user
+            cand_del = None
+            cand_draw = None
+
             for op in reversed(self._operations):
-                if op.user_id == user_id and op.is_undone and op.cleared_at_seq is None:
-                    self._seq_num += 1
-                    op.is_undone = False
-                    logger.info("Room %s: User %s redid op %s (seq %d)", self.room_id, user_id, op.op_id, self._seq_num)
-                    return True, "Operation restored", op
+                if op.cleared_at_seq is not None:
+                    continue
+                if cand_del is None and not op.is_deleted and op.last_undone_deleted_by == user_id:
+                    cand_del = op
+                if cand_draw is None and not op.is_deleted and op.is_undone and op.user_id == user_id:
+                    cand_draw = op
+
+            if cand_del:
+                self._seq_num += 1
+                cand_del.is_deleted = True
+                cand_del.deleted_by = user_id
+                cand_del.deleted_seq = self._seq_num
+                cand_del.last_undone_deleted_by = None
+                logger.info("Room %s: User %s redid deletion of op %s (seq %d)",
+                            self.room_id, user_id, cand_del.op_id, self._seq_num)
+                return True, "Operation restored (deleted)", cand_del
+
+            elif cand_draw:
+                self._seq_num += 1
+                cand_draw.is_undone = False
+                logger.info("Room %s: User %s redid op %s (seq %d)",
+                            self.room_id, user_id, cand_draw.op_id, self._seq_num)
+                return True, "Operation restored", cand_draw
 
             return False, "No undone operations to redo for this user", None
 

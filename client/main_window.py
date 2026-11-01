@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QFont, QIcon
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -308,6 +308,15 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._wire_signals()
 
+        # Ensure End Meeting visibility matches initial host status
+        self.end_meeting_btn.setVisible(bool(self.state.is_host))
+
+        # Global delete shortcuts for canvas selected object
+        self._del_shortcut = QShortcut(QKeySequence.StandardKey.Delete, self)
+        self._del_shortcut.activated.connect(self.canvas.delete_selected)
+        self._backspace_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Backspace), self)
+        self._backspace_shortcut.activated.connect(self.canvas.delete_selected)
+
     def _setup_ui(self) -> None:
         central_widget = QWidget(self)
         central_widget.setObjectName("centralWidget")
@@ -554,11 +563,15 @@ class MainWindow(QMainWindow):
         username: str,
         participants: list,
         snapshot: dict,
+        is_host: Optional[bool] = None,
     ) -> None:
         """Called when room is created or joined successfully."""
         self.state.current_room_id = room_id
         self.state.current_room_name = room_name
         self.state.username = username
+        if is_host is not None:
+            self.state.is_host = is_host
+        self.end_meeting_btn.setVisible(bool(self.state.is_host))
         self.setWindowTitle(f"LAN Collaborative Whiteboard - Room: {room_id}")
 
         self.room_btn.setText(f"Room: {room_id} ▾")
@@ -736,25 +749,28 @@ class MainWindow(QMainWindow):
         elif action == "undo":
             op_id = msg.get("op_id")
             if op_id:
-                self.state.undo_operation(op_id)
+                if not msg.get("is_deleted", False):
+                    self.state.restore_deleted_operation(op_id)
+                else:
+                    self.state.undo_operation(op_id)
                 self.canvas.update()
 
         elif action == "redo":
             op_id = msg.get("op_id")
             op = msg.get("operation")
             if op_id:
-                self.state.redo_operation(op_id, op)
+                if msg.get("is_deleted", False):
+                    self.state.delete_operation(op_id)
+                else:
+                    self.state.redo_operation(op_id, op)
                 self.canvas.update()
 
     def _on_remote_laser_stroke(self, msg: Dict[str, Any]) -> None:
         pts = msg.get("points", [])
         col = msg.get("color", "#EF4444")
+        uid = msg.get("user_id", "")
         if pts:
-            self.state.laser_strokes.append({
-                "points": pts,
-                "color": col,
-                "created_at": time.time(),
-            })
+            self.state.add_laser_stroke(uid, pts, col)
             self.canvas.update()
 
     def _on_remote_laser_pointer(self, msg: Dict[str, Any]) -> None:

@@ -136,11 +136,19 @@ class CollaborativeWhiteboardApp:
         participants = data.get("participants", [])
         snapshot = data.get("snapshot", {})
 
+        is_host = bool(data.get("is_host", False))
+        if not is_host and participants:
+            for p in participants:
+                if p.get("user_id") == self.state.user_id:
+                    is_host = bool(p.get("is_host", False))
+                    break
+        self.state.is_host = is_host
+
         if self.conn_win:
             self.conn_win.hide()
 
         self.main_win = MainWindow(self.state, self.network)
-        self.main_win.update_session_info(room_id, room_name, username, participants, snapshot)
+        self.main_win.update_session_info(room_id, room_name, username, participants, snapshot, is_host=is_host)
 
         # Preload chat history if present
         chat_hist = data.get("chat_history", [])

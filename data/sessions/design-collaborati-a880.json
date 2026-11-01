@@ -1,0 +1,194 @@
+{
+  "version": 1,
+  "room_id": "design-collaborati-a880",
+  "room_name": "Design Collaboration",
+  "creator_id": "user-5de761d3",
+  "created_at": 1793551733.1895437,
+  "has_password": false,
+  "password_hash": null,
+  "password_salt": null,
+  "seq_num": 6,
+  "operations": [
+    {
+      "op_id": "op-5c1e2a656a16",
+      "op_type": "circle",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          505.6,
+          328.0
+        ],
+        "start": [
+          396.0,
+          162.4
+        ],
+        "width": 3
+      },
+      "user_id": "user-5de761d3",
+      "username": "Engineer",
+      "seq_num": 1,
+      "created_at": 1793551747.5251105,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "deleted_by": null,
+      "deleted_seq": null,
+      "last_undone_deleted_by": null,
+      "author_id": "user-5de761d3",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-b4b6637023b9",
+      "op_type": "circle",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          592.0,
+          292.8
+        ],
+        "start": [
+          592.0,
+          292.8
+        ],
+        "width": 3
+      },
+      "user_id": "user-5de761d3",
+      "username": "Engineer",
+      "seq_num": 2,
+      "created_at": 1793551748.0698042,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "deleted_by": null,
+      "deleted_seq": null,
+      "last_undone_deleted_by": null,
+      "author_id": "user-5de761d3",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-a653b0327622",
+      "op_type": "circle",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          694.4,
+          294.4
+        ],
+        "start": [
+          567.2,
+          123.2
+        ],
+        "width": 3
+      },
+      "user_id": "user-5de761d3",
+      "username": "Engineer",
+      "seq_num": 3,
+      "created_at": 1793551751.899942,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "deleted_by": null,
+      "deleted_seq": null,
+      "last_undone_deleted_by": null,
+      "author_id": "user-5de761d3",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-8db8a32e75bf",
+      "op_type": "circle",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          742.4,
+          377.6
+        ],
+        "start": [
+          742.4,
+          377.6
+        ],
+        "width": 3
+      },
+      "user_id": "user-5de761d3",
+      "username": "Engineer",
+      "seq_num": 4,
+      "created_at": 1793551753.4542994,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "deleted_by": null,
+      "deleted_seq": null,
+      "last_undone_deleted_by": null,
+      "author_id": "user-5de761d3",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-58ec6de2b5d2",
+      "op_type": "circle",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          781.6,
+          420.0
+        ],
+        "start": [
+          781.6,
+          420.0
+        ],
+        "width": 3
+      },
+      "user_id": "user-5de761d3",
+      "username": "Engineer",
+      "seq_num": 5,
+      "created_at": 1793551759.2942958,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "deleted_by": null,
+      "deleted_seq": null,
+      "last_undone_deleted_by": null,
+      "author_id": "user-5de761d3",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-83a2e48b7c63",
+      "op_type": "circle",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          820.8,
+          445.6
+        ],
+        "start": [
+          817.6,
+          432.8
+        ],
+        "width": 3
+      },
+      "user_id": "user-5de761d3",
+      "username": "Engineer",
+      "seq_num": 6,
+      "created_at": 1793551760.0636122,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "deleted_by": null,
+      "deleted_seq": null,
+      "last_undone_deleted_by": null,
+      "author_id": "user-5de761d3",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    }
+  ],
+  "chat_messages": []
+}

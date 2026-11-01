@@ -23,7 +23,14 @@ from PySide6.QtGui import (
     QPainterPath,
     QPen,
 )
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QLineEdit,
+    QPlainTextEdit,
+    QTextEdit,
+    QToolTip,
+    QWidget,
+)
 
 from client.dialogs import StickyNoteDialog, TextInputDialog
 
@@ -118,6 +125,9 @@ class WhiteboardCanvas(QWidget):
 
     def delete_selected(self) -> None:
         """Deletes currently selected object from active canvas."""
+        focused = QApplication.focusWidget()
+        if isinstance(focused, (QLineEdit, QTextEdit, QPlainTextEdit)):
+            return
         if self.state.selected_op_id:
             op_id = self.state.selected_op_id
             self.state.delete_operation(op_id)
@@ -126,7 +136,8 @@ class WhiteboardCanvas(QWidget):
             self.update()
 
     def _on_laser_timer_tick(self) -> None:
-        if self.state.purge_expired_lasers(LASER_FADE_DURATION):
+        if self.state.laser_strokes:
+            self.state.purge_expired_lasers(LASER_FADE_DURATION)
             self.update()
 
     def keyPressEvent(self, event) -> None:
@@ -183,7 +194,30 @@ class WhiteboardCanvas(QWidget):
             if self._is_dragging_object or self._resizing_handle:
                 self._handle_select_move(pos)
                 self.update()
-            return
+                QToolTip.hideText()
+                return
+
+        # Check hover for author attribution tooltip when not drawing/dragging
+        if not self._is_drawing and not self._is_dragging_object:
+            hit_op = self._hit_test_precise(pos)
+            if hit_op:
+                author = hit_op.get("author_name") or hit_op.get("username") or "Unknown"
+                tool_type = hit_op.get("op_type", "")
+                tool_names = {
+                    TOOL_PEN: "Pen",
+                    TOOL_ERASER: "Eraser",
+                    TOOL_LINE: "Line",
+                    TOOL_RECT: "Rectangle",
+                    TOOL_CIRCLE: "Circle",
+                    TOOL_TEXT: "Text",
+                    TOOL_STICKY: "Sticky Note",
+                }
+                tool_name = tool_names.get(tool_type, tool_type.capitalize() or "Drawing")
+                tooltip_text = f"Created by: {author} | Tool: {tool_name}"
+                global_pos = event.globalPosition().toPoint()
+                QToolTip.showText(global_pos, tooltip_text, self)
+            else:
+                QToolTip.hideText()
 
         if not self._is_drawing:
             return
@@ -197,6 +231,10 @@ class WhiteboardCanvas(QWidget):
                 self.update()
         else:
             self.update()
+
+    def leaveEvent(self, event) -> None:
+        QToolTip.hideText()
+        super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if event.button() != Qt.MouseButton.LeftButton:
@@ -420,8 +458,9 @@ class WhiteboardCanvas(QWidget):
         if op_type == TOOL_TEXT:
             text = data.get("text", "")
             lines = text.count("\n") + 1
-            w = max(120, len(text) * 9)
-            h = lines * 24 + 30
+            font_size = data.get("font_size", 16)
+            w = max(80, len(text) * 10)
+            h = lines * (font_size + 8) + 10
             return QRectF(data.get("x", 0), data.get("y", 0), w, h)
 
         if op_type in (TOOL_LINE, TOOL_RECT, TOOL_CIRCLE):
@@ -445,14 +484,101 @@ class WhiteboardCanvas(QWidget):
 
         return QRectF()
 
-    def _hit_test(self, pos: QPointF) -> Optional[Dict[str, Any]]:
+    @staticmethod
+    def _dist_to_segment(px: float, py: float, x1: float, y1: float, x2: float, y2: float) -> float:
+        """Calculates perpendicular Euclidean distance from point (px, py) to segment (x1, y1)-(x2, y2)."""
+        dx = x2 - x1
+        dy = y2 - y1
+        l2 = dx * dx + dy * dy
+        if l2 == 0:
+            return math.hypot(px - x1, py - y1)
+        t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / l2))
+        proj_x = x1 + t * dx
+        proj_y = y1 + t * dy
+        return math.hypot(px - proj_x, py - proj_y)
+
+    def _hit_test_precise(self, pos: QPointF) -> Optional[Dict[str, Any]]:
+        """
+        Accurate hit-testing for all object types:
+        - Pen / Eraser: distance to polyline segments taking stroke width into account.
+        - Lines: distance to line segment taking width into account.
+        - Rectangles: boundary or inside with tolerance.
+        - Circles / Ellipses: boundary or inside with tolerance.
+        - Text & Sticky Notes: accurate bounding box.
+        """
         for op in reversed(self.state.operations):
             if op.get("is_undone", False) or op.get("cleared_at_seq") is not None or op.get("is_deleted", False):
                 continue
-            rect = self._get_op_bounding_rect(op)
-            if rect.adjusted(-6, -6, 6, 6).contains(pos):
-                return op
+
+            op_type = op.get("op_type")
+            data = op.get("data", {})
+            width = float(data.get("width", 3))
+            tol = max(8.0, (width / 2.0) + 4.0)
+
+            if op_type in (TOOL_PEN, TOOL_ERASER):
+                pts = data.get("points", [])
+                if not pts:
+                    continue
+                if len(pts) == 1:
+                    if math.hypot(pos.x() - pts[0][0], pos.y() - pts[0][1]) <= tol:
+                        return op
+                else:
+                    hit = False
+                    for i in range(len(pts) - 1):
+                        d = self._dist_to_segment(pos.x(), pos.y(), pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1])
+                        if d <= tol:
+                            hit = True
+                            break
+                    if hit:
+                        return op
+
+            elif op_type == TOOL_LINE:
+                start = data.get("start", [0, 0])
+                end = data.get("end", [0, 0])
+                if self._dist_to_segment(pos.x(), pos.y(), start[0], start[1], end[0], end[1]) <= tol:
+                    return op
+
+            elif op_type == TOOL_RECT:
+                start = data.get("start", [0, 0])
+                end = data.get("end", [0, 0])
+                x1, x2 = min(start[0], end[0]), max(start[0], end[0])
+                y1, y2 = min(start[1], end[1]), max(start[1], end[1])
+                # Within bounds plus tolerance
+                if (x1 - tol) <= pos.x() <= (x2 + tol) and (y1 - tol) <= pos.y() <= (y2 + tol):
+                    return op
+
+            elif op_type == TOOL_CIRCLE:
+                start = data.get("start", [0, 0])
+                end = data.get("end", [0, 0])
+                x1, x2 = min(start[0], end[0]), max(start[0], end[0])
+                y1, y2 = min(start[1], end[1]), max(start[1], end[1])
+                cx = (x1 + x2) / 2.0
+                cy = (y1 + y2) / 2.0
+                rx = max(1.0, (x2 - x1) / 2.0)
+                ry = max(1.0, (y2 - y1) / 2.0)
+                norm_dist = ((pos.x() - cx) / rx) ** 2 + ((pos.y() - cy) / ry) ** 2
+                if norm_dist <= 1.05 or abs(math.sqrt(norm_dist) - 1.0) * min(rx, ry) <= tol:
+                    return op
+
+            elif op_type == TOOL_TEXT:
+                text = data.get("text", "")
+                font_size = data.get("font_size", 16)
+                lines = text.count("\n") + 1
+                w = max(80, len(text) * 10)
+                h = lines * (font_size + 8) + 10
+                rect = QRectF(data.get("x", 0), data.get("y", 0), w, h)
+                if rect.adjusted(-4, -4, 4, 4).contains(pos):
+                    return op
+
+            elif op_type == TOOL_STICKY:
+                rect = QRectF(data.get("x", 0), data.get("y", 0), data.get("width", 180), data.get("height", 140))
+                if rect.adjusted(-4, -4, 4, 4).contains(pos):
+                    return op
+
         return None
+
+    def _hit_test(self, pos: QPointF) -> Optional[Dict[str, Any]]:
+        return self._hit_test_precise(pos)
 
     def _get_handle_at(self, op: Dict[str, Any], pos: QPointF) -> Optional[str]:
         rect = self._get_op_bounding_rect(op)
@@ -566,7 +692,7 @@ class WhiteboardCanvas(QWidget):
             h = abs(end[1] - start[1])
             painter.drawEllipse(QRectF(x, y, w, h))
 
-        # Text Tool with Mandatory Author Attribution
+        # Text Tool
         elif op_type == TOOL_TEXT:
             text = data.get("text", "")
             x = data.get("x", 0)
@@ -577,17 +703,7 @@ class WhiteboardCanvas(QWidget):
             painter.setPen(QColor(color_hex))
             painter.drawText(QPointF(x, y + font_size), text)
 
-            # Mandatory Author Attribution
-            author = op.get("author_name") or op.get("username") or "Unknown"
-            author_tag = f"Written by: {author}"
-            author_font = QFont("Segoe UI", 9)
-            author_font.setItalic(True)
-            painter.setFont(author_font)
-            painter.setPen(QColor("#64748B"))
-            lines_count = text.count("\n") + 1
-            painter.drawText(QPointF(x, y + font_size + lines_count * 20), author_tag)
-
-        # Sticky Notes with Mandatory Author Attribution
+        # Sticky Notes
         elif op_type == TOOL_STICKY:
             x = data.get("x", 0)
             y = data.get("y", 0)
@@ -610,18 +726,8 @@ class WhiteboardCanvas(QWidget):
             text = data.get("text", "")
             painter.setFont(QFont("Segoe UI", 11))
             painter.setPen(QColor("#1E293B"))
-            text_rect = QRectF(x + 10, y + 10, w - 20, h - 35)
+            text_rect = QRectF(x + 10, y + 10, w - 20, h - 20)
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap, text)
-
-            # Mandatory Author Attribution
-            author = op.get("author_name") or op.get("username") or "Unknown"
-            author_tag = f"Written by: {author}"
-            author_font = QFont("Segoe UI", 9)
-            author_font.setItalic(True)
-            painter.setFont(author_font)
-            painter.setPen(QColor("#475569"))
-            author_rect = QRectF(x + 10, y + h - 22, w - 20, 16)
-            painter.drawText(author_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, author_tag)
 
     def _render_selection(self, painter: QPainter, op: Dict[str, Any]) -> None:
         rect = self._get_op_bounding_rect(op).adjusted(-4, -4, 4, 4)
@@ -699,13 +805,16 @@ class WhiteboardCanvas(QWidget):
         if len(points) < 2:
             return
 
+        base_color = QColor(color_hex)
+        r, g, b = base_color.red(), base_color.green(), base_color.blue()
+
         path = QPainterPath()
         path.moveTo(points[0][0], points[0][1])
         for pt in points[1:]:
             path.lineTo(pt[0], pt[1])
 
         # Outer soft glow
-        glow_pen = QPen(QColor(239, 68, 68, int(80 * alpha_mult)), 12)
+        glow_pen = QPen(QColor(r, g, b, int(110 * alpha_mult)), 12)
         glow_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         glow_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(glow_pen)

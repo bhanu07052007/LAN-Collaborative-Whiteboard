@@ -107,6 +107,15 @@ class LocalState:
                 return True
         return False
 
+    def restore_deleted_operation(self, op_id: str) -> bool:
+        """Restores a deleted operation back to visible active state."""
+        for op in self.operations:
+            if op.get("op_id") == op_id:
+                op["is_deleted"] = False
+                op["is_undone"] = False
+                return True
+        return False
+
     def undo_operation(self, op_id: str) -> bool:
         """Marks an operation as undone in the local history."""
         for op in reversed(self.operations):
@@ -131,8 +140,17 @@ class LocalState:
         self.operations.clear()
         self.selected_op_id = None
 
-    def purge_expired_lasers(self, fade_duration: float = 2.5) -> bool:
-        """Removes faded laser strokes. Returns True if any stroke was removed."""
+    def add_laser_stroke(self, user_id: str, points: List[List[float]], color: str = "#EF4444") -> None:
+        """Adds a temporary laser stroke with current timestamp."""
+        self.laser_strokes.append({
+            "user_id": user_id,
+            "points": points,
+            "color": color,
+            "created_at": time.time(),
+        })
+
+    def purge_expired_lasers(self, fade_duration: float = 3.0) -> bool:
+        """Removes faded laser strokes older than fade_duration seconds."""
         now = time.time()
         initial_len = len(self.laser_strokes)
         self.laser_strokes = [

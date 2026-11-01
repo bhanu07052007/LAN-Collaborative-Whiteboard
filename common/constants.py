@@ -64,7 +64,7 @@ ALLOWED_FILE_EXTENSIONS = [
 REPLAY_SPEEDS = [0.5, 1.0, 2.0, 4.0]
 
 # Laser Tool Configurations
-LASER_FADE_DURATION = 2.5  # seconds
+LASER_FADE_DURATION = 3.0  # seconds (auto-fades and disappears after exactly 3s)
 LASER_COLOR = "#EF4444"  # Bright glowing red
 
 # Canvas Configurations

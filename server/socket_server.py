@@ -369,6 +369,7 @@ class SocketServer:
             participants=room.list_participants(),
             snapshot=wb.get_snapshot(),
             seq_num=wb.current_seq_num,
+            is_host=True,
         )
         self.connection_mgr.send_to_client(user_id, resp)
 
@@ -438,6 +439,7 @@ class SocketServer:
             snapshot=wb.get_snapshot(),
             seq_num=wb.current_seq_num,
             chat_history=chat.get_history(limit=50),
+            is_host=(user_id == room.creator_id),
         )
         self.connection_mgr.send_to_client(user_id, resp)
 
@@ -569,6 +571,8 @@ class SocketServer:
             action="delete",
             seq_num=op.seq_num,
             op_id=op.op_id,
+            is_deleted=True,
+            operation=op.to_dict(),
         )
         self.connection_mgr.broadcast_to_room(room_id, update)
 
@@ -661,13 +665,22 @@ class SocketServer:
         self.connection_mgr.broadcast_to_room(room_id, msg, exclude_user_id=user_id)
 
     def _handle_end_meeting(self, user_id: str, room_id: str, msg: Dict[str, Any]) -> None:
-        """Host terminates the meeting and generates session report."""
+        """Host terminates the meeting and generates session report. Rejects unauthorized attempts."""
+        room = self.session_mgr.get_room(room_id)
+        if not room or room.creator_id != user_id:
+            logger.warning("Unauthorized END_MEETING attempt in room %s by user %s (host is %s)",
+                           room_id, user_id, room.creator_id if room else "None")
+            self.connection_mgr.send_to_client(
+                user_id,
+                build_message(MessageType.ERROR, message="Only the meeting host can end the meeting"),
+            )
+            return
+
         client = self.connection_mgr.get_client(user_id)
         username = client.username if client else "Host"
         wb = self.whiteboard_mgr.get_or_create_room_whiteboard(room_id)
 
         # Persist room state
-        room = self.session_mgr.get_room(room_id)
         if room:
             self.persistence_mgr.save_room_state(room, self.whiteboard_mgr, self.chat_mgr)
 
@@ -711,6 +724,8 @@ class SocketServer:
             seq_num=wb.current_seq_num,
             op_id=affected_op.op_id,
             user_id=user_id,
+            is_deleted=affected_op.is_deleted,
+            operation=affected_op.to_dict(),
         )
         self.connection_mgr.broadcast_to_room(room_id, update)
 
@@ -732,8 +747,9 @@ class SocketServer:
             action="redo",
             seq_num=wb.current_seq_num,
             op_id=affected_op.op_id,
-            operation=affected_op.to_dict(),
             user_id=user_id,
+            is_deleted=affected_op.is_deleted,
+            operation=affected_op.to_dict(),
         )
         self.connection_mgr.broadcast_to_room(room_id, update)
 
