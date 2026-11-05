@@ -116,22 +116,35 @@ class LocalState:
                 return True
         return False
 
-    def undo_operation(self, op_id: str) -> bool:
+    def undo_operation(self, op_id: str, op_dict: Optional[Dict[str, Any]] = None) -> bool:
         """Marks an operation as undone in the local history."""
         for op in reversed(self.operations):
             if op.get("op_id") == op_id:
-                op["is_undone"] = True
+                if op_dict:
+                    op.update(op_dict)
+                else:
+                    if op.get("is_deleted", False):
+                        op["is_deleted"] = False
+                        op["is_undone"] = False
+                    else:
+                        op["is_undone"] = True
                 return True
+        if op_dict:
+            self.operations.append(op_dict)
+            return True
         return False
 
-    def redo_operation(self, op_id: str, new_op: Optional[Dict[str, Any]] = None) -> bool:
+    def redo_operation(self, op_id: str, op_dict: Optional[Dict[str, Any]] = None) -> bool:
         """Restores an undone operation."""
         for op in reversed(self.operations):
             if op.get("op_id") == op_id:
-                op["is_undone"] = False
+                if op_dict:
+                    op.update(op_dict)
+                else:
+                    op["is_undone"] = False
                 return True
-        if new_op:
-            self.operations.append(new_op)
+        if op_dict:
+            self.operations.append(op_dict)
             return True
         return False
 

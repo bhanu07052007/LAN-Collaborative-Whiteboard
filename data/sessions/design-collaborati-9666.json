@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "room_id": "design-collaborati-9666",
+  "room_name": "Design Collaboration",
+  "creator_id": "user-a467fe11",
+  "created_at": 1793883736.451997,
+  "has_password": false,
+  "password_hash": null,
+  "password_salt": null,
+  "seq_num": 0,
+  "operations": [],
+  "chat_messages": []
+}

@@ -21,6 +21,7 @@ from common.constants import (
     TOOL_ERASER,
     TOOL_LINE,
     TOOL_PEN,
+    TOOL_LASER_PEN,
     TOOL_RECT,
     TOOL_STICKY,
     TOOL_TEXT,
@@ -117,7 +118,19 @@ class RoomWhiteboard:
         self._seq_num = 0
         self._operations: List[DrawingOperation] = []
         self._processed_op_ids: Dict[str, DrawingOperation] = {}
+        self._user_undo_stacks: Dict[str, List[Tuple[str, str]]] = {}
+        self._user_redo_stacks: Dict[str, List[Tuple[str, str]]] = {}
         self._lock = threading.RLock()
+
+    def _get_user_undo_stack(self, user_id: str) -> List[Tuple[str, str]]:
+        if user_id not in self._user_undo_stacks:
+            self._user_undo_stacks[user_id] = []
+        return self._user_undo_stacks[user_id]
+
+    def _get_user_redo_stack(self, user_id: str) -> List[Tuple[str, str]]:
+        if user_id not in self._user_redo_stacks:
+            self._user_redo_stacks[user_id] = []
+        return self._user_redo_stacks[user_id]
 
     @property
     def current_seq_num(self) -> int:
@@ -138,7 +151,7 @@ class RoomWhiteboard:
             return False, "Operation missing valid 'data' object"
 
         # Validate tool-specific payload
-        if op_type in (TOOL_PEN, TOOL_ERASER):
+        if op_type in (TOOL_PEN, TOOL_ERASER, TOOL_LASER_PEN):
             width = data.get("width")
             if width is None or not isinstance(width, (int, float)) or not (MIN_BRUSH_WIDTH <= width <= MAX_BRUSH_WIDTH):
                 return False, f"Width must be between {MIN_BRUSH_WIDTH} and {MAX_BRUSH_WIDTH}"
@@ -148,7 +161,7 @@ class RoomWhiteboard:
 
             points = data.get("points")
             if not isinstance(points, list) or len(points) < 1:
-                return False, "Pen/eraser operation must contain a non-empty list of points"
+                return False, "Pen/eraser/laser operation must contain a non-empty list of points"
             for pt in points:
                 if not (isinstance(pt, (list, tuple)) and len(pt) >= 2):
                     return False, "Points must be coordinate pairs [x, y]"
@@ -240,6 +253,9 @@ class RoomWhiteboard:
             )
             self._operations.append(op)
             self._processed_op_ids[op_id] = op
+            # Track operation on user's undo stack and clear invalid redo history
+            self._get_user_undo_stack(user_id).append(("draw", op.op_id))
+            self._get_user_redo_stack(user_id).clear()
             logger.debug("Room %s: assigned seq %d to %s op %s", self.room_id, self._seq_num, op.op_type, op.op_id)
             return True, "", op
 
@@ -261,6 +277,7 @@ class RoomWhiteboard:
                     op.data.update(new_data)
                     op.last_modified_by = modifier_name
                     op.last_modified_at = time.time()
+                    self._get_user_redo_stack(modifier_id).clear()
                     logger.info("Room %s: Op %s modified by %s (author preserved as %s)",
                                 self.room_id, op_id, modifier_name, op.author_name)
                     return True, "Object modified", op
@@ -279,6 +296,8 @@ class RoomWhiteboard:
                     op.deleted_by = user_id
                     op.deleted_seq = self._seq_num
                     op.last_undone_deleted_by = None
+                    self._get_user_undo_stack(user_id).append(("delete", op.op_id))
+                    self._get_user_redo_stack(user_id).clear()
                     logger.info("Room %s: Op %s deleted by %s (seq %d)", self.room_id, op_id, user_id, self._seq_num)
                     return True, "Object deleted", op
 
@@ -302,6 +321,13 @@ class RoomWhiteboard:
                         op.cleared_at_seq = None
                     op.is_undone = False
 
+            # Reset and rebuild stacks for consistency
+            self._user_undo_stacks.clear()
+            self._user_redo_stacks.clear()
+            for op in self._operations:
+                if not op.is_undone and not op.is_deleted and op.cleared_at_seq is None:
+                    self._get_user_undo_stack(op.user_id).append(("draw", op.op_id))
+
             active_ops = [op for op in self._operations if not op.is_undone and op.cleared_at_seq is None and not op.is_deleted]
             logger.info("Room %s: Whiteboard restored to seq %d (%d active ops)", self.room_id, target_seq, len(active_ops))
             return True, f"Restored to sequence {target_seq}", active_ops
@@ -313,37 +339,45 @@ class RoomWhiteboard:
         Returns (success, message, affected_operation).
         """
         with self._lock:
-            cand_del = None
-            cand_draw = None
+            undo_stack = self._get_user_undo_stack(user_id)
+            redo_stack = self._get_user_redo_stack(user_id)
 
-            for op in reversed(self._operations):
-                if op.cleared_at_seq is not None:
+            # Reconstruct undo stack from operations if currently empty
+            if not undo_stack:
+                for op in self._operations:
+                    if op.cleared_at_seq is not None:
+                        continue
+                    if op.is_deleted and op.deleted_by == user_id:
+                        undo_stack.append(("delete", op.op_id))
+                    elif not op.is_deleted and not op.is_undone and op.user_id == user_id:
+                        undo_stack.append(("draw", op.op_id))
+
+            while undo_stack:
+                action, op_id = undo_stack.pop()
+                op = self._processed_op_ids.get(op_id)
+                if not op or op.cleared_at_seq is not None:
                     continue
-                if cand_del is None and op.is_deleted and op.deleted_by == user_id:
-                    cand_del = op
-                if cand_draw is None and not op.is_deleted and not op.is_undone and op.user_id == user_id:
-                    cand_draw = op
 
-            del_seq = (cand_del.deleted_seq or 0) if cand_del else -1
-            draw_seq = cand_draw.seq_num if cand_draw else -1
+                if action == "delete":
+                    if op.is_deleted:
+                        self._seq_num += 1
+                        op.is_deleted = False
+                        op.is_undone = False
+                        op.deleted_by = None
+                        op.deleted_seq = None
+                        redo_stack.append(("delete", op.op_id))
+                        logger.info("Room %s: User %s undid deletion of op %s (restored at seq %d)",
+                                    self.room_id, user_id, op.op_id, self._seq_num)
+                        return True, "Deletion undone, object restored", op
 
-            if cand_del and del_seq >= draw_seq:
-                self._seq_num += 1
-                cand_del.is_deleted = False
-                cand_del.is_undone = False
-                cand_del.deleted_by = None
-                cand_del.deleted_seq = None
-                cand_del.last_undone_deleted_by = user_id
-                logger.info("Room %s: User %s undid deletion of op %s (restored at seq %d)",
-                            self.room_id, user_id, cand_del.op_id, self._seq_num)
-                return True, "Deletion undone, object restored", cand_del
-
-            elif cand_draw:
-                self._seq_num += 1
-                cand_draw.is_undone = True
-                logger.info("Room %s: User %s undid op %s (seq %d)",
-                            self.room_id, user_id, cand_draw.op_id, self._seq_num)
-                return True, "Operation undone", cand_draw
+                elif action == "draw":
+                    if not op.is_undone and not op.is_deleted:
+                        self._seq_num += 1
+                        op.is_undone = True
+                        redo_stack.append(("draw", op.op_id))
+                        logger.info("Room %s: User %s undid op %s (seq %d)",
+                                    self.room_id, user_id, op.op_id, self._seq_num)
+                        return True, "Operation undone", op
 
             return False, "No active operations to undo for this user", None
 
@@ -353,33 +387,34 @@ class RoomWhiteboard:
         Returns (success, message, affected_operation).
         """
         with self._lock:
-            cand_del = None
-            cand_draw = None
+            undo_stack = self._get_user_undo_stack(user_id)
+            redo_stack = self._get_user_redo_stack(user_id)
 
-            for op in reversed(self._operations):
-                if op.cleared_at_seq is not None:
+            while redo_stack:
+                action, op_id = redo_stack.pop()
+                op = self._processed_op_ids.get(op_id)
+                if not op or op.cleared_at_seq is not None:
                     continue
-                if cand_del is None and not op.is_deleted and op.last_undone_deleted_by == user_id:
-                    cand_del = op
-                if cand_draw is None and not op.is_deleted and op.is_undone and op.user_id == user_id:
-                    cand_draw = op
 
-            if cand_del:
-                self._seq_num += 1
-                cand_del.is_deleted = True
-                cand_del.deleted_by = user_id
-                cand_del.deleted_seq = self._seq_num
-                cand_del.last_undone_deleted_by = None
-                logger.info("Room %s: User %s redid deletion of op %s (seq %d)",
-                            self.room_id, user_id, cand_del.op_id, self._seq_num)
-                return True, "Operation restored (deleted)", cand_del
+                if action == "delete":
+                    if not op.is_deleted:
+                        self._seq_num += 1
+                        op.is_deleted = True
+                        op.deleted_by = user_id
+                        op.deleted_seq = self._seq_num
+                        undo_stack.append(("delete", op.op_id))
+                        logger.info("Room %s: User %s redid deletion of op %s (seq %d)",
+                                    self.room_id, user_id, op.op_id, self._seq_num)
+                        return True, "Operation restored (deleted)", op
 
-            elif cand_draw:
-                self._seq_num += 1
-                cand_draw.is_undone = False
-                logger.info("Room %s: User %s redid op %s (seq %d)",
-                            self.room_id, user_id, cand_draw.op_id, self._seq_num)
-                return True, "Operation restored", cand_draw
+                elif action == "draw":
+                    if op.is_undone and not op.is_deleted:
+                        self._seq_num += 1
+                        op.is_undone = False
+                        undo_stack.append(("draw", op.op_id))
+                        logger.info("Room %s: User %s redid op %s (seq %d)",
+                                    self.room_id, user_id, op.op_id, self._seq_num)
+                        return True, "Operation restored", op
 
             return False, "No undone operations to redo for this user", None
 
@@ -396,6 +431,10 @@ class RoomWhiteboard:
                 if not op.is_undone and op.cleared_at_seq is None:
                     op.cleared_at_seq = clear_seq
                     cleared_count += 1
+
+            # Invalidate all user undo and redo histories upon full canvas clear
+            self._user_undo_stacks.clear()
+            self._user_redo_stacks.clear()
 
             logger.info("Room %s: Canvas cleared by %s (%s), %d ops cleared at seq %d",
                         self.room_id, username, user_id, cleared_count, clear_seq)
@@ -430,6 +469,11 @@ class RoomWhiteboard:
             self._seq_num = seq_num
             self._operations = [DrawingOperation.from_dict(d) for d in operations_data]
             self._processed_op_ids = {op.op_id: op for op in self._operations}
+            self._user_undo_stacks.clear()
+            self._user_redo_stacks.clear()
+            for op in self._operations:
+                if not op.is_undone and not op.is_deleted and op.cleared_at_seq is None:
+                    self._get_user_undo_stack(op.user_id).append(("draw", op.op_id))
             logger.info("Room %s restored %d operations, seq %d", self.room_id, len(self._operations), self._seq_num)
 
 

@@ -36,6 +36,7 @@ SUPPORTED_TOOLS = [
     TOOL_CIRCLE,
     TOOL_TEXT,
     TOOL_STICKY,
+    TOOL_LASER_PEN,
 ]
 
 # Sticky Note Color Palette

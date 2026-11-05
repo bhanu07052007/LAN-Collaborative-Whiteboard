@@ -515,6 +515,7 @@ class SocketServer:
             room_id=room_id,
             action="draw",
             seq_num=op.seq_num,
+            op_id=op.op_id,
             operation=op.to_dict(),
         )
         self.connection_mgr.broadcast_to_room(room_id, update)
@@ -754,9 +755,19 @@ class SocketServer:
         self.connection_mgr.broadcast_to_room(room_id, update)
 
     def _handle_clear_canvas(self, user_id: str, room_id: str) -> None:
-        """Handles canvas reset request."""
+        """Handles canvas reset request. Validates host permissions."""
+        room = self.session_mgr.get_room(room_id)
+        if not room or room.creator_id != user_id:
+            logger.warning("Unauthorized CLEAR_CANVAS attempt in room %s by user %s (host is %s)",
+                           room_id, user_id, room.creator_id if room else "None")
+            self.connection_mgr.send_to_client(
+                user_id,
+                build_message(MessageType.ERROR, message="Only the meeting host can clear the canvas"),
+            )
+            return
+
         client = self.connection_mgr.get_client(user_id)
-        username = client.username if client else "User"
+        username = client.username if client else "Host"
 
         wb = self.whiteboard_mgr.get_or_create_room_whiteboard(room_id)
         new_seq, cleared_count = wb.clear_canvas(user_id, username)
@@ -764,6 +775,10 @@ class SocketServer:
         tracker = self.report_mgr.get_tracker(room_id)
         if tracker:
             tracker.record_clear(user_id, username, new_seq)
+
+        # Record host clear action in session chat history
+        chat = self.chat_mgr.get_or_create_room_chat(room_id)
+        chat.add_message("system", "System", f"Whiteboard was cleared by host {username}")
 
         msg = build_message(
             MessageType.CLEAR_CANVAS,

@@ -1,6 +1,6 @@
 """
 Connection Window for Collaborative Whiteboard.
-Closely matches the modern dark navy & blue design (#080F1C / #0D1728 / #263E62).
+Uses a clean light-blue and white desktop design with readable labels and balanced spacing.
 Provides two distinct modes:
 1. 'Join Existing Room' (Room ID, Password)
 2. 'Create New Room' (Room Name, custom/auto-generated Room ID, Optional Password)
@@ -48,9 +48,12 @@ class ConnectionWindow(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("LAN Collaborative Whiteboard - Connect")
-        self.setMinimumSize(460, 580)
-        self.resize(500, 680)
+        self.setMinimumSize(520, 680)
+        self.resize(560, 760)
         self._current_mode = "join"  # 'join' or 'create'
+        # Preserve each mode's text when switching between Join and Create.
+        self._join_room_id = "room-1"
+        self._create_room_name = "Design Collaboration"
 
         self._apply_stylesheet()
         self._setup_ui()
@@ -72,6 +75,9 @@ class ConnectionWindow(QWidget):
                 font-size: 13px;
                 font-weight: 500;
                 background-color: transparent;
+                min-height: 18px;
+                padding: 0px;
+                margin: 0px;
             }
             QLabel.sectionHeader {
                 color: #172B4D;
@@ -96,7 +102,7 @@ class ConnectionWindow(QWidget):
             QLineEdit::placeholder {
                 color: #8294AD;
             }
-            QPushButton.modeTab {
+            QPushButton[class="modeTab"] {
                 background-color: #F2F7FF;
                 color: #64748B;
                 border: 1.5px solid #AFCDF3;
@@ -105,11 +111,11 @@ class ConnectionWindow(QWidget):
                 font-weight: 700;
                 font-size: 12px;
             }
-            QPushButton.modeTab:hover {
+            QPushButton[class="modeTab"]:hover {
                 background-color: #C8DFFF;
                 color: #172B4D;
             }
-            QPushButton.modeTab:checked {
+            QPushButton[class="modeTab"]:checked {
                 background-color: #3478F6;
                 color: #FFFFFF;
                 border-color: #3478F6;
@@ -142,7 +148,8 @@ class ConnectionWindow(QWidget):
         card = QFrame(self)
         card.setObjectName("cardFrame")
         card_layout = QVBoxLayout(card)
-        card_layout.setSpacing(12)
+        card_layout.setContentsMargins(24, 24, 24, 24)
+        card_layout.setSpacing(14)
 
         # Header with Logo & Brand Title
         title_box = QVBoxLayout()
@@ -191,8 +198,11 @@ class ConnectionWindow(QWidget):
 
         # Form Fields Grid
         grid = QGridLayout()
-        grid.setSpacing(8)
-        grid.setVerticalSpacing(8)
+        grid.setContentsMargins(0, 4, 0, 4)
+        grid.setHorizontalSpacing(12)
+        # Extra vertical space prevents labels touching the previous input
+        # when the additional Custom Room ID field is visible in Create mode.
+        grid.setVerticalSpacing(14)
 
         # Username
         grid.addWidget(QLabel("Your Username:", card), 0, 0, 1, 2)
@@ -258,7 +268,10 @@ class ConnectionWindow(QWidget):
 
         # Show Password Checkbox
         self.show_pwd_cb = QCheckBox("Show password", card)
-        self.show_pwd_cb.setStyleSheet("font-size: 11px; color: #64748B;")
+        self.show_pwd_cb.setStyleSheet(
+            "font-size: 12px; color: #526987; spacing: 8px; "
+            "padding: 4px 0px; background: transparent;"
+        )
         self.show_pwd_cb.toggled.connect(self._toggle_password_visibility)
         grid.addWidget(self.show_pwd_cb, 10, 0, 1, 2)
 
@@ -282,20 +295,42 @@ class ConnectionWindow(QWidget):
         self._set_mode("join")
 
     def _set_mode(self, mode: str) -> None:
+        # Save the text from the mode being left so switching tabs does not
+        # overwrite what the user has already typed.
+        if hasattr(self, "input_field1"):
+            if self._current_mode == "join":
+                self._join_room_id = self.input_field1.text()
+            else:
+                self._create_room_name = self.input_field1.text()
+
         self._current_mode = mode
         self.status_lbl.setText("")
+
         if mode == "join":
+            # Join mode has fewer fields, so retain the compact window size.
+            self.setMinimumSize(520, 680)
+            self.resize(560, 760)
+
             self.lbl_field1.setText("Room Identifier:")
             self.input_field1.setPlaceholderText("e.g. room-1")
-            if not self.input_field1.text().strip():
-                self.input_field1.setText("room-1")
+            self.input_field1.setText(self._join_room_id or "room-1")
+
             self.lbl_field2.setVisible(False)
             self.input_field2.setVisible(False)
             self.btn_action.setText("Join Room")
         else:
+            # Create mode needs extra vertical room for the Custom Room ID
+            # field. Expanding the window prevents the grid from compressing
+            # labels against the input boxes.
+            self.setMinimumSize(520, 820)
+            self.resize(560, 840)
+
             self.lbl_field1.setText("Room Name:")
             self.input_field1.setPlaceholderText("e.g. Sprint Planning")
-            self.input_field1.setText("Design Collaboration")
+            self.input_field1.setText(
+                self._create_room_name or "Design Collaboration"
+            )
+
             self.lbl_field2.setVisible(True)
             self.input_field2.setVisible(True)
             self.btn_action.setText("Create New Room")

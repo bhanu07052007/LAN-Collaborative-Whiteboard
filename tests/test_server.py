@@ -158,3 +158,169 @@ def test_full_server_client_integration():
             except Exception:
                 pass
             server.stop()
+
+
+def test_two_client_undo_redo_and_clear_synchronization():
+    """
+    Direct multi-client TCP integration test covering the 10-step synchronization requirement:
+    1. Host draws something.
+    2. Participant draws something.
+    3. Host performs Undo.
+    4. Verify that the correct operation disappears on all clients.
+    5. Host performs Redo.
+    6. Verify that the operation returns on all clients.
+    7. Participant attempts to clear the canvas.
+    8. Verify that the server rejects the request.
+    9. Host clears the canvas.
+    10. Verify that the canvas becomes empty on both clients.
+    """
+    def recv_match(sock, msg_type, action=None, timeout=3.0):
+        start = time.time()
+        sock.settimeout(timeout)
+        while time.time() - start < timeout:
+            m = receive_message(sock)
+            if m and m.get("type") == msg_type:
+                if action is None or m.get("action") == action:
+                    return m
+        return None
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
+        port = get_ephemeral_port()
+        config = ServerConfig(host="127.0.0.1", port=port, sessions_dir=Path(tmpdir))
+        server = SocketServer(config)
+        server.start()
+        time.sleep(0.3)
+
+        c_host = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        c_part = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        try:
+            # Setup: Host creates room, Participant joins
+            c_host.connect(("127.0.0.1", port))
+            send_message(c_host, build_message(
+                MessageType.CREATE_ROOM,
+                room_id="sync-test-room",
+                room_name="Sync Test Room",
+                username="HostUser",
+                user_id="user-host",
+            ))
+            r_host = receive_message(c_host)
+            assert r_host["type"] == MessageType.ROOM_CREATED.value
+            assert r_host["is_host"] is True
+
+            c_part.connect(("127.0.0.1", port))
+            send_message(c_part, build_message(
+                MessageType.JOIN_ROOM,
+                room_id="sync-test-room",
+                username="RemotePart",
+                user_id="user-part",
+            ))
+            r_part = receive_message(c_part)
+            assert r_part["type"] == MessageType.JOIN_SUCCESS.value
+            assert r_part["is_host"] is False
+
+            # Drain join notice from host
+            recv_match(c_host, MessageType.PARTICIPANT_JOINED.value)
+
+            # 1. Host draws something (rectangle)
+            host_rect_op = {
+                "type": MessageType.DRAW.value,
+                "room_id": "sync-test-room",
+                "op_type": "rect",
+                "data": {"start": [10, 10], "end": [50, 50], "color": "#000000", "width": 2},
+                "op_id": "op-host-rect",
+            }
+            send_message(c_host, host_rect_op)
+            upd_host_1 = recv_match(c_host, MessageType.STATE_UPDATE.value, action="draw")
+            upd_part_1 = recv_match(c_part, MessageType.STATE_UPDATE.value, action="draw")
+            assert (upd_host_1.get("op_id") or upd_host_1.get("operation", {}).get("op_id")) == "op-host-rect"
+            assert (upd_part_1.get("op_id") or upd_part_1.get("operation", {}).get("op_id")) == "op-host-rect"
+
+            # 2. Participant draws something (line)
+            part_line_op = {
+                "type": MessageType.DRAW.value,
+                "room_id": "sync-test-room",
+                "op_type": "line",
+                "data": {"start": [100, 100], "end": [200, 200], "color": "#FF0000", "width": 3},
+                "op_id": "op-part-line",
+            }
+            send_message(c_part, part_line_op)
+            upd_host_2 = recv_match(c_host, MessageType.STATE_UPDATE.value, action="draw")
+            upd_part_2 = recv_match(c_part, MessageType.STATE_UPDATE.value, action="draw")
+            assert (upd_host_2.get("op_id") or upd_host_2.get("operation", {}).get("op_id")) == "op-part-line"
+            assert (upd_part_2.get("op_id") or upd_part_2.get("operation", {}).get("op_id")) == "op-part-line"
+
+            # 3. Host performs Undo
+            send_message(c_host, build_message(MessageType.UNDO, room_id="sync-test-room"))
+
+            # 4. Verify that the correct operation disappears on all clients (host's rect undone, participant's line untouched)
+            undo_host = recv_match(c_host, MessageType.STATE_UPDATE.value, action="undo")
+            undo_part = recv_match(c_part, MessageType.STATE_UPDATE.value, action="undo")
+            assert undo_host is not None and undo_part is not None
+            assert undo_host["op_id"] == "op-host-rect"
+            assert undo_part["op_id"] == "op-host-rect"
+            assert undo_host["operation"]["is_undone"] is True
+            assert undo_part["operation"]["is_undone"] is True
+
+            # 5. Host performs Redo
+            send_message(c_host, build_message(MessageType.REDO, room_id="sync-test-room"))
+
+            # 6. Verify that the operation returns on all clients (host's rect restored)
+            redo_host = recv_match(c_host, MessageType.STATE_UPDATE.value, action="redo")
+            redo_part = recv_match(c_part, MessageType.STATE_UPDATE.value, action="redo")
+            assert redo_host is not None and redo_part is not None
+            assert redo_host["op_id"] == "op-host-rect"
+            assert redo_part["op_id"] == "op-host-rect"
+            assert redo_host["operation"]["is_undone"] is False
+            assert redo_part["operation"]["is_undone"] is False
+
+            # 6b. Participant performs Undo (verifying participant can undo their line without affecting host's rect)
+            send_message(c_part, build_message(MessageType.UNDO, room_id="sync-test-room"))
+            p_undo_host = recv_match(c_host, MessageType.STATE_UPDATE.value, action="undo")
+            p_undo_part = recv_match(c_part, MessageType.STATE_UPDATE.value, action="undo")
+            assert p_undo_host is not None and p_undo_part is not None
+            assert p_undo_host["op_id"] == "op-part-line"
+            assert p_undo_part["op_id"] == "op-part-line"
+            assert p_undo_host["operation"]["is_undone"] is True
+            assert p_undo_part["operation"]["is_undone"] is True
+
+            # 6c. Participant performs Redo (verifying participant restores their line)
+            send_message(c_part, build_message(MessageType.REDO, room_id="sync-test-room"))
+            p_redo_host = recv_match(c_host, MessageType.STATE_UPDATE.value, action="redo")
+            p_redo_part = recv_match(c_part, MessageType.STATE_UPDATE.value, action="redo")
+            assert p_redo_host is not None and p_redo_part is not None
+            assert p_redo_host["op_id"] == "op-part-line"
+            assert p_redo_part["op_id"] == "op-part-line"
+            assert p_redo_host["operation"]["is_undone"] is False
+            assert p_redo_part["operation"]["is_undone"] is False
+
+            # 7. Participant attempts to clear the canvas (unauthorized)
+            send_message(c_part, build_message(MessageType.CLEAR_CANVAS, room_id="sync-test-room"))
+
+            # 8. Verify that the server rejects the request
+            err_part = recv_match(c_part, MessageType.ERROR.value)
+            assert err_part is not None
+            assert "Only the meeting host" in err_part["message"]
+
+            # 9. Host clears the canvas
+            send_message(c_host, build_message(MessageType.CLEAR_CANVAS, room_id="sync-test-room"))
+
+            # 10. Verify that the canvas becomes empty on both clients
+            clear_host = recv_match(c_host, MessageType.CLEAR_CANVAS.value)
+            clear_part = recv_match(c_part, MessageType.CLEAR_CANVAS.value)
+            assert clear_host is not None
+            assert clear_part is not None
+            assert clear_host["username"] == "HostUser"
+            assert clear_part["username"] == "HostUser"
+
+        finally:
+            try:
+                c_host.close()
+            except Exception:
+                pass
+            try:
+                c_part.close()
+            except Exception:
+                pass
+            server.stop()
+

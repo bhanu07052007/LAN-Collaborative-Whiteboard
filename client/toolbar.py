@@ -369,18 +369,20 @@ class WhiteboardToolbar(QFrame):
         self.redo_btn.setVisible(False)
         self.redo_btn.clicked.connect(self.redo_requested.emit)
 
-        # Clear button (compact label)
+        # Clear button (compact label) - visible only for host
         self.clear_btn = QPushButton("Clear", self.actions_container)
         self.clear_btn.setIcon(ui_icons.get_tool_icon("clear", color="#E5484D"))
         self.clear_btn.setProperty("class", "actionDanger")
         self._ensure_btn_width(self.clear_btn, "Clear", extra=24)
-        self.clear_btn.setToolTip("Clear the entire shared canvas for all participants")
+        self.clear_btn.setToolTip("Clear the entire shared canvas (Host only)")
         self.clear_btn.clicked.connect(self._confirm_clear)
+        self.clear_btn.setVisible(bool(self.state.is_host))
         actions_layout.addWidget(self.clear_btn)
 
         self.main_layout.addWidget(self.actions_container)
 
         self.sep_actions = self._create_separator()
+        self.sep_actions.setVisible(bool(self.state.is_host))
         self.main_layout.addWidget(self.sep_actions)
 
         # ---------------------------------------------------------------------
@@ -597,11 +599,19 @@ class WhiteboardToolbar(QFrame):
         self.size_val_label.setText(f"{val} px")
         self.brush_size_changed.emit(val)
 
+    def set_is_host(self, is_host: bool) -> None:
+        """Enables and shows the Clear Canvas action for host only."""
+        self.clear_btn.setVisible(bool(is_host))
+        self.sep_actions.setVisible(bool(is_host))
+
     def _confirm_clear(self) -> None:
+        if not self.state.is_host:
+            QMessageBox.warning(self, "Permission Denied", "Only the meeting host can clear the canvas.")
+            return
         reply = QMessageBox.question(
             self,
-            "Clear Shared Whiteboard",
-            "Are you sure you want to clear the entire whiteboard for all participants?",
+            "Clear Whiteboard",
+            "Are you sure you want to clear the entire whiteboard?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )

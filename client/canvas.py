@@ -413,7 +413,7 @@ class WhiteboardCanvas(QWidget):
                 end = data.get("end", [0, 0])
                 data["start"] = [round(start[0] + dx, 1), round(start[1] + dy, 1)]
                 data["end"] = [round(end[0] + dx, 1), round(end[1] + dy, 1)]
-            elif op_type in (TOOL_PEN, TOOL_ERASER):
+            elif op_type in (TOOL_PEN, TOOL_ERASER, TOOL_LASER_PEN):
                 pts = data.get("points", [])
                 for pt in pts:
                     pt[0] = round(pt[0] + dx, 1)
@@ -472,7 +472,7 @@ class WhiteboardCanvas(QWidget):
             h = max(10, abs(end[1] - start[1]))
             return QRectF(x, y, w, h)
 
-        if op_type in (TOOL_PEN, TOOL_ERASER):
+        if op_type in (TOOL_PEN, TOOL_ERASER, TOOL_LASER_PEN):
             pts = data.get("points", [])
             if not pts:
                 return QRectF()
@@ -515,7 +515,7 @@ class WhiteboardCanvas(QWidget):
             width = float(data.get("width", 3))
             tol = max(8.0, (width / 2.0) + 4.0)
 
-            if op_type in (TOOL_PEN, TOOL_ERASER):
+            if op_type in (TOOL_PEN, TOOL_ERASER, TOOL_LASER_PEN):
                 pts = data.get("points", [])
                 if not pts:
                     continue
@@ -658,14 +658,17 @@ class WhiteboardCanvas(QWidget):
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
 
-        if op_type in (TOOL_PEN, TOOL_ERASER):
+        if op_type in (TOOL_PEN, TOOL_ERASER, TOOL_LASER_PEN):
             points = data.get("points", [])
             if len(points) >= 2:
-                path = QPainterPath()
-                path.moveTo(points[0][0], points[0][1])
-                for pt in points[1:]:
-                    path.lineTo(pt[0], pt[1])
-                painter.drawPath(path)
+                if op_type == TOOL_LASER_PEN:
+                    self._draw_glowing_stroke(painter, points, color_hex, alpha_mult=1.0)
+                else:
+                    path = QPainterPath()
+                    path.moveTo(points[0][0], points[0][1])
+                    for pt in points[1:]:
+                        path.lineTo(pt[0], pt[1])
+                    painter.drawPath(path)
             elif len(points) == 1:
                 painter.drawPoint(QPointF(points[0][0], points[0][1]))
 

@@ -198,19 +198,6 @@ class CanvasViewportContainer(QWidget):
         btn_redo.clicked.connect(self.main_win._on_redo_requested)
         layout.addWidget(btn_redo)
 
-        # Separator
-        sep = QFrame(bar)
-        sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet("background-color: #AFCDF3; max-width: 1px; min-width: 1px; margin: 2px 2px;")
-        layout.addWidget(sep)
-
-        # Delete selected
-        btn_del = QPushButton(bar)
-        btn_del.setIcon(ui_icons.get_tool_icon("delete", color="#E5484D", size=16))
-        btn_del.setToolTip("Delete selected object (Del)")
-        btn_del.clicked.connect(self.canvas.delete_selected)
-        layout.addWidget(btn_del)
-
         bar.adjustSize()
         return bar
 
@@ -308,8 +295,17 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._wire_signals()
 
-        # Ensure End Meeting visibility matches initial host status
+        # Ensure Host-only actions visibility matches initial host status
         self.end_meeting_btn.setVisible(bool(self.state.is_host))
+        self.toolbar.set_is_host(bool(self.state.is_host))
+
+        # Global shortcuts for Undo and Redo
+        self._undo_shortcut = QShortcut(QKeySequence.StandardKey.Undo, self)
+        self._undo_shortcut.activated.connect(self._on_undo_requested)
+        self._redo_shortcut = QShortcut(QKeySequence.StandardKey.Redo, self)
+        self._redo_shortcut.activated.connect(self._on_redo_requested)
+        self._redo_shortcut_alt = QShortcut(QKeySequence("Ctrl+Y"), self)
+        self._redo_shortcut_alt.activated.connect(self._on_redo_requested)
 
         # Global delete shortcuts for canvas selected object
         self._del_shortcut = QShortcut(QKeySequence.StandardKey.Delete, self)
@@ -572,6 +568,7 @@ class MainWindow(QMainWindow):
         if is_host is not None:
             self.state.is_host = is_host
         self.end_meeting_btn.setVisible(bool(self.state.is_host))
+        self.toolbar.set_is_host(bool(self.state.is_host))
         self.setWindowTitle(f"LAN Collaborative Whiteboard - Room: {room_id}")
 
         self.room_btn.setText(f"Room: {room_id} ▾")
@@ -648,14 +645,36 @@ class MainWindow(QMainWindow):
             self.network.send_laser_pointer(self.state.current_room_id, self.state.user_id, x, y, active)
 
     def _on_undo_requested(self) -> None:
+        sender = self.sender()
+        if sender in (getattr(self, "_undo_shortcut", None), getattr(self, "_redo_shortcut", None), getattr(self, "_redo_shortcut_y", None)):
+            focused = QApplication.focusWidget()
+            from PySide6.QtWidgets import QLineEdit, QTextEdit, QPlainTextEdit
+            if isinstance(focused, (QLineEdit, QTextEdit, QPlainTextEdit)):
+                return
+        # If user has an active ephemeral laser stroke, remove the latest one locally
+        if self.state.laser_strokes:
+            for i in range(len(self.state.laser_strokes) - 1, -1, -1):
+                if self.state.laser_strokes[i].get("user_id") == self.state.user_id:
+                    self.state.laser_strokes.pop(i)
+                    self.canvas.update()
+                    break
         if self.state.current_room_id:
             self.network.send_undo(self.state.current_room_id, self.state.user_id)
 
     def _on_redo_requested(self) -> None:
+        sender = self.sender()
+        if sender in (getattr(self, "_undo_shortcut", None), getattr(self, "_redo_shortcut", None), getattr(self, "_redo_shortcut_y", None)):
+            focused = QApplication.focusWidget()
+            from PySide6.QtWidgets import QLineEdit, QTextEdit, QPlainTextEdit
+            if isinstance(focused, (QLineEdit, QTextEdit, QPlainTextEdit)):
+                return
         if self.state.current_room_id:
             self.network.send_redo(self.state.current_room_id, self.state.user_id)
 
     def _on_clear_requested(self) -> None:
+        if not self.state.is_host:
+            QMessageBox.warning(self, "Permission Denied", "Only the meeting host can clear the canvas.")
+            return
         if self.state.current_room_id:
             self.network.send_clear_canvas(self.state.current_room_id, self.state.user_id)
 
@@ -748,21 +767,20 @@ class MainWindow(QMainWindow):
 
         elif action == "undo":
             op_id = msg.get("op_id")
+            op = msg.get("operation")
             if op_id:
-                if not msg.get("is_deleted", False):
-                    self.state.restore_deleted_operation(op_id)
-                else:
-                    self.state.undo_operation(op_id)
+                if self.state.selected_op_id == op_id:
+                    self.state.selected_op_id = None
+                self.state.undo_operation(op_id, op)
                 self.canvas.update()
 
         elif action == "redo":
             op_id = msg.get("op_id")
             op = msg.get("operation")
             if op_id:
-                if msg.get("is_deleted", False):
-                    self.state.delete_operation(op_id)
-                else:
-                    self.state.redo_operation(op_id, op)
+                if self.state.selected_op_id == op_id and op and op.get("is_deleted", False):
+                    self.state.selected_op_id = None
+                self.state.redo_operation(op_id, op)
                 self.canvas.update()
 
     def _on_remote_laser_stroke(self, msg: Dict[str, Any]) -> None:
@@ -843,8 +861,8 @@ class MainWindow(QMainWindow):
     def _on_remote_clear_canvas(self, msg: Dict[str, Any]) -> None:
         self.state.clear_operations()
         self.canvas.update()
-        username = msg.get("username", "A user")
-        self.chat_panel.add_system_message(f"Canvas was cleared by {username}")
+        username = msg.get("username", "Host")
+        self.chat_panel.add_system_message(f"Whiteboard was cleared by host {username}")
 
     def _on_remote_participant_joined(self, msg: Dict[str, Any]) -> None:
         self.participant_panel.add_participant(msg)

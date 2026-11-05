@@ -981,11 +981,13 @@ def test_light_blue_theme_and_bottom_undo_redo():
     assert "Redo" not in tb_action_btns
     assert "Clear" in tb_action_btns
 
-    # 4. Verify Undo and Redo are present at canvas bottom-right action bar
+    # 4. Verify Undo and Redo are present at canvas bottom-right action bar and trash/delete is removed
     bottom_action_btns = win.canvas_viewport.action_bar.findChildren(QPushButton)
     assert any("Undo" in b.toolTip() for b in bottom_action_btns)
     assert any("Redo" in b.toolTip() for b in bottom_action_btns)
-    assert any("Delete" in b.toolTip() for b in bottom_action_btns)
+    assert not any("Delete" in b.toolTip() for b in bottom_action_btns)
+    assert not any("Clear" in b.toolTip() for b in bottom_action_btns)
+    assert len(bottom_action_btns) == 2
 
 
 def test_deletion_and_undo_redo_restoration():
@@ -1123,6 +1125,205 @@ def test_host_only_end_meeting_authorization():
     state_guest = LocalState(user_id="guest-2", username="Guest", is_host=False)
     win_guest = MainWindow(state_guest, net)
     assert win_guest.end_meeting_btn.isHidden()
+
+
+def test_undo_redo_invalid_redo_history_cleared_on_new_draw():
+    from server.whiteboard_manager import RoomWhiteboard
+    wb = RoomWhiteboard("room-redo-inval")
+
+    # 1. User draws op1, op2
+    wb.add_operation({"op_type": "line", "data": {"start": [0, 0], "end": [10, 10], "color": "#000", "width": 2}}, "u1", "Alice")
+    wb.add_operation({"op_type": "line", "data": {"start": [20, 20], "end": [30, 30], "color": "#000", "width": 2}}, "u1", "Alice")
+    assert len(wb.get_snapshot()["operations"]) == 2
+
+    # 2. User undid op2
+    ok_u1, _, undone_1 = wb.undo_last_user_operation("u1")
+    assert ok_u1 is True
+    assert undone_1.data["start"] == [20, 20]
+    assert len(wb.get_snapshot()["operations"]) == 1
+
+    # 3. User draws op3 (new drawing after undo)
+    wb.add_operation({"op_type": "rect", "data": {"start": [50, 50], "end": [60, 60], "color": "#000", "width": 2}}, "u1", "Alice")
+    assert len(wb.get_snapshot()["operations"]) == 2
+
+    # 4. Redo must be empty because op3 invalidated the redo history
+    ok_r, msg_r, _ = wb.redo_last_user_operation("u1")
+    assert ok_r is False
+    assert "No undone operations to redo" in msg_r
+
+    # 5. Undo now reverses op3
+    ok_u2, _, undone_2 = wb.undo_last_user_operation("u1")
+    assert ok_u2 is True
+    assert undone_2.op_type == "rect"
+    assert len(wb.get_snapshot()["operations"]) == 1
+
+    # 6. Undo again reverses op1
+    ok_u3, _, undone_3 = wb.undo_last_user_operation("u1")
+    assert ok_u3 is True
+    assert undone_3.data["start"] == [0, 0]
+    assert len(wb.get_snapshot()["operations"]) == 0
+
+    # 7. Redo restores op1
+    ok_r1, _, redone_1 = wb.redo_last_user_operation("u1")
+    assert ok_r1 is True
+    assert redone_1.data["start"] == [0, 0]
+    assert len(wb.get_snapshot()["operations"]) == 1
+
+    # 8. Redo restores op3
+    ok_r2, _, redone_2 = wb.redo_last_user_operation("u1")
+    assert ok_r2 is True
+    assert redone_2.op_type == "rect"
+    assert len(wb.get_snapshot()["operations"]) == 2
+
+
+def test_host_only_clear_canvas_permissions_ui_and_server():
+    from server.session_manager import SessionManager
+    from server.socket_server import SocketServer
+    from common.message_types import MessageType
+
+    session_mgr = SessionManager()
+    ok, msg, room = session_mgr.create_room(room_id="clear-perm-room", creator_id="host-1", room_name="Clear Perm Room")
+    assert ok
+
+    server = SocketServer()
+    server.session_mgr = session_mgr
+
+    # Add a drawing to the room
+    wb = server.whiteboard_mgr.get_or_create_room_whiteboard("clear-perm-room")
+    wb.add_operation({"op_type": "pen", "data": {"points": [[1, 1], [2, 2]], "color": "#000", "width": 2}}, "host-1", "Host")
+    assert len(wb.get_snapshot()["operations"]) == 1
+
+    sent_messages = []
+    server.connection_mgr.send_to_client = lambda uid, m: sent_messages.append((uid, m))
+
+    # 1. Non-host attempts to clear canvas
+    server._handle_clear_canvas(user_id="guest-99", room_id="clear-perm-room")
+
+    # Verify server rejected request
+    assert len(sent_messages) == 1
+    assert sent_messages[0][0] == "guest-99"
+    assert sent_messages[0][1]["type"] == MessageType.ERROR.value
+    assert "Only the meeting host can clear the canvas" in sent_messages[0][1]["message"]
+    # Canvas must still have the active drawing
+    assert len(wb.get_snapshot()["operations"]) == 1
+
+    # 2. Host clears canvas
+    server._handle_clear_canvas(user_id="host-1", room_id="clear-perm-room")
+    # Canvas is now empty
+    assert len(wb.get_snapshot()["operations"]) == 0
+
+    # 3. UI checks: Host has clear button visible; participant has clear button hidden
+    app = QApplication.instance() or QApplication([])
+    state_host = LocalState(user_id="host-1", username="Host", is_host=True)
+    win_host = MainWindow(state_host, NetworkClient())
+    assert not win_host.toolbar.clear_btn.isHidden()
+
+    state_guest = LocalState(user_id="guest-99", username="Guest", is_host=False)
+    win_guest = MainWindow(state_guest, NetworkClient())
+    assert win_guest.toolbar.clear_btn.isHidden()
+
+
+def test_undo_redo_all_supported_tools():
+    """Verifies that Undo and Redo work identically for all 8 drawing tools."""
+    from server.whiteboard_manager import RoomWhiteboard
+    from common.constants import (
+        TOOL_PEN, TOOL_ERASER, TOOL_LINE, TOOL_RECT,
+        TOOL_CIRCLE, TOOL_TEXT, TOOL_STICKY, TOOL_LASER_PEN
+    )
+
+    wb = RoomWhiteboard("room-all-tools-undo-redo")
+
+    # Define operations for all 8 tools
+    tool_ops = [
+        {"op_type": TOOL_PEN, "data": {"points": [[10, 10], [20, 20]], "color": "#000000", "width": 3}},
+        {"op_type": TOOL_ERASER, "data": {"points": [[30, 30], [40, 40]], "color": "#FFFFFF", "width": 10}},
+        {"op_type": TOOL_LINE, "data": {"start": [50, 50], "end": [100, 100], "color": "#FF0000", "width": 2}},
+        {"op_type": TOOL_RECT, "data": {"start": [110, 110], "end": [160, 160], "color": "#00FF00", "width": 2}},
+        {"op_type": TOOL_CIRCLE, "data": {"start": [170, 170], "end": [220, 220], "color": "#0000FF", "width": 2}},
+        {"op_type": TOOL_TEXT, "data": {"x": 230, "y": 230, "text": "Hello World", "color": "#172B4D", "font_size": 16}},
+        {"op_type": TOOL_STICKY, "data": {"x": 250, "y": 250, "width": 180, "height": 140, "text": "Sprint Task", "color": "#FEF08A"}},
+        {"op_type": TOOL_LASER_PEN, "data": {"points": [[300, 300], [350, 350]], "color": "#EF4444", "width": 4}},
+    ]
+
+    for op in tool_ops:
+        ok, msg, created = wb.add_operation(op, "user-all", "TestUser")
+        assert ok is True, f"Failed to add {op['op_type']}: {msg}"
+
+    snapshot = wb.get_snapshot()
+    assert len(snapshot["operations"]) == 8
+
+    # Undo in LIFO order
+    for expected_op in reversed(tool_ops):
+        ok, msg, undone = wb.undo_last_user_operation("user-all")
+        assert ok is True
+        assert undone.op_type == expected_op["op_type"]
+        assert undone.is_undone is True
+
+    # After undoing all 8, canvas snapshot must be empty
+    assert len(wb.get_snapshot()["operations"]) == 0
+
+    # Redo in forward chronological order
+    for expected_op in tool_ops:
+        ok, msg, redone = wb.redo_last_user_operation("user-all")
+        assert ok is True
+        assert redone.op_type == expected_op["op_type"]
+        assert redone.is_undone is False
+        # Verify data properties preserved
+        for k, v in expected_op["data"].items():
+            assert redone.data[k] == v
+
+    # After redoing all 8, canvas snapshot must have all 8 operations active
+    assert len(wb.get_snapshot()["operations"]) == 8
+
+
+def test_undo_redo_empty_history_safety():
+    """Verifies that calling Undo or Redo on empty histories fails gracefully without crashing."""
+    from server.whiteboard_manager import RoomWhiteboard
+    wb = RoomWhiteboard("room-empty-safety")
+
+    # 1. Empty undo
+    ok_u, msg_u, op_u = wb.undo_last_user_operation("user-none")
+    assert ok_u is False
+    assert op_u is None
+    assert "No active operations" in msg_u
+
+    # 2. Empty redo
+    ok_r, msg_r, op_r = wb.redo_last_user_operation("user-none")
+    assert ok_r is False
+    assert op_r is None
+    assert "No undone operations" in msg_r
+
+    # 3. Add one op, undo it, redo it, redo again (should fail safely)
+    wb.add_operation({"op_type": "line", "data": {"start": [1, 1], "end": [2, 2], "color": "#000", "width": 1}}, "u1", "A")
+    wb.undo_last_user_operation("u1")
+    wb.redo_last_user_operation("u1")
+    ok_r2, msg_r2, _ = wb.redo_last_user_operation("u1")
+    assert ok_r2 is False
+    assert "No undone operations" in msg_r2
+
+
+def test_undo_redo_modify_invalidation():
+    """Verifies that modifying an object after undo clears user's redo stack."""
+    from server.whiteboard_manager import RoomWhiteboard
+    wb = RoomWhiteboard("room-modify-inval")
+
+    wb.add_operation({"op_type": "rect", "data": {"start": [0, 0], "end": [10, 10], "color": "#000", "width": 1}, "op_id": "op-rect-1"}, "u1", "A")
+    wb.add_operation({"op_type": "rect", "data": {"start": [20, 20], "end": [30, 30], "color": "#000", "width": 1}, "op_id": "op-rect-2"}, "u1", "A")
+
+    # Undo op-rect-2
+    ok_u, _, undone = wb.undo_last_user_operation("u1")
+    assert ok_u and undone.op_id == "op-rect-2"
+
+    # User modifies op-rect-1
+    ok_m, _, mod = wb.modify_operation("op-rect-1", {"color": "#FF0000"}, "u1", "A")
+    assert ok_m is True
+
+    # Redo stack must be invalidated by modification
+    ok_r, msg_r, _ = wb.redo_last_user_operation("u1")
+    assert ok_r is False
+    assert "No undone operations" in msg_r
+
+
 
 
 

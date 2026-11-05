@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "room_id": "room-327236",
+  "room_name": "a",
+  "creator_id": "user-5527c998",
+  "created_at": 1793890191.9408262,
+  "has_password": false,
+  "password_hash": null,
+  "password_salt": null,
+  "seq_num": 3,
+  "operations": [
+    {
+      "op_id": "op-53511c6f86ac",
+      "op_type": "line",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          550.4,
+          448.8
+        ],
+        "start": [
+          336.8,
+          220.0
+        ],
+        "width": 3
+      },
+      "user_id": "user-5527c998",
+      "username": "Engineer",
+      "seq_num": 1,
+      "created_at": 1793890259.288589,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "deleted_by": null,
+      "deleted_seq": null,
+      "last_undone_deleted_by": null,
+      "author_id": "user-5527c998",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-a568b8c33bbf",
+      "op_type": "line",
+      "data": {
+        "color": "#1E293B",
+        "end": [
+          733.6,
+          364.0
+        ],
+        "start": [
+          563.2,
+          164.0
+        ],
+        "width": 3
+      },
+      "user_id": "user-5527c998",
+      "username": "Engineer",
+      "seq_num": 2,
+      "created_at": 1793890259.932655,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "deleted_by": null,
+      "deleted_seq": null,
+      "last_undone_deleted_by": null,
+      "author_id": "user-5527c998",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    },
+    {
+      "op_id": "op-aa3388ef71da",
+      "op_type": "pen",
+      "data": {
+        "color": "#1E293B",
+        "points": [
+          [
+            708.8,
+            145.6
+          ],
+          [
+            710.4,
+            144.0
+          ],
+          [
+            716.0,
+            144.0
+          ],
+          [
+            721.6,
+            144.0
+          ],
+          [
+            729.6,
+            144.0
+          ],
+          [
+            734.4,
+            144.0
+          ],
+          [
+            738.4,
+            144.0
+          ],
+          [
+            744.0,
+            145.6
+          ],
+          [
+            748.0,
+            146.4
+          ],
+          [
+            752.8,
+            147.2
+          ],
+          [
+            761.6,
+            151.2
+          ],
+          [
+            766.4,
+            154.4
+          ],
+          [
+            778.4,
+            162.4
+          ],
+          [
+            781.6,
+            164.0
+          ],
+          [
+            789.6,
+            171.2
+          ],
+          [
+            792.0,
+            173.6
+          ],
+          [
+            794.4,
+            176.0
+          ],
+          [
+            796.8,
+            180.0
+          ],
+          [
+            798.4,
+            182.4
+          ],
+          [
+            800.0,
+            185.6
+          ],
+          [
+            802.4,
+            191.2
+          ],
+          [
+            804.8,
+            199.2
+          ],
+          [
+            805.6,
+            208.0
+          ],
+          [
+            807.2,
+            214.4
+          ],
+          [
+            807.2,
+            225.6
+          ],
+          [
+            807.2,
+            234.4
+          ],
+          [
+            807.2,
+            242.4
+          ],
+          [
+            807.2,
+            252.8
+          ],
+          [
+            807.2,
+            260.8
+          ],
+          [
+            808.0,
+            264.0
+          ],
+          [
+            808.8,
+            267.2
+          ],
+          [
+            810.4,
+            270.4
+          ],
+          [
+            814.4,
+            276.0
+          ],
+          [
+            816.8,
+            279.2
+          ],
+          [
+            825.6,
+            288.0
+          ],
+          [
+            833.6,
+            292.8
+          ],
+          [
+            839.2,
+            295.2
+          ],
+          [
+            852.0,
+            297.6
+          ],
+          [
+            867.2,
+            300.8
+          ],
+          [
+            884.8,
+            300.8
+          ],
+          [
+            895.2,
+            300.8
+          ],
+          [
+            913.6,
+            300.8
+          ],
+          [
+            932.8,
+            300.8
+          ],
+          [
+            948.8,
+            298.4
+          ],
+          [
+            965.6,
+            294.4
+          ],
+          [
+            972.8,
+            293.6
+          ],
+          [
+            978.4,
+            292.0
+          ],
+          [
+            983.2,
+            289.6
+          ],
+          [
+            986.4,
+            287.2
+          ]
+        ],
+        "width": 3
+      },
+      "user_id": "user-5527c998",
+      "username": "Engineer",
+      "seq_num": 3,
+      "created_at": 1793890335.3155375,
+      "is_undone": false,
+      "cleared_at_seq": null,
+      "is_deleted": false,
+      "deleted_by": null,
+      "deleted_seq": null,
+      "last_undone_deleted_by": null,
+      "author_id": "user-5527c998",
+      "author_name": "Engineer",
+      "last_modified_by": null,
+      "last_modified_at": null
+    }
+  ],
+  "chat_messages": []
+}
